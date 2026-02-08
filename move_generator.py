@@ -11,6 +11,9 @@ class move_generator:
     def gen_moves(self, move_list: list, color: int):
         return list
 
+    def filter_moves(self, move_list: list, color: int):
+        pass
+
     def gen_pawn_move(self, move_list: list, color: int):
         pass
 
