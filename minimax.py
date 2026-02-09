@@ -7,10 +7,11 @@ from state import *
 class Searcher:
 
     def __init__(self):
+        self.depth = 0
         pass
 
-    def minimax(self, state: State):
-
-
+    def maxi(self, state: State):
         pass
 
+    def mini(self, state: State):
+        pass
