@@ -84,56 +84,40 @@ class State:
         full_moves = sections[5]
         self.full_moves = int(full_moves)
 
+    def move_piece(self, start: int, target: int, piece: int) -> None:
+        piece = self.board[start]
+
+        # Update board
+        self.board[target] = self.board[start]
+        self.board[start] = None
+
+        # Update piece positions
+        self.piece_positions[piece].remove(start)
+        self.piece_positions[piece].append(target)
+
+        return
+
+    def remove_piece(self, square: int) -> None:
+        piece = self.board[square]
+        
+        if (piece != NO_PIECE):
+            self.board[square] = NO_PIECE
+            self.piece_positions[piece].remove(square)
+
     def make_move(self, move: Move) -> None:
         
-        # TODO: probably put castle and promotion case in quiet move case
-        # Non capture
-        if (move.is_quiet() and not move.is_castle() and not move.is_promotion()):
-            start = move.start
-            target = move.target
-            piece = self.board[start]
-
-            # Update board
-            self.board[target] = self.board[start]
-            self.board[start] = None
-
-            # Update piece positions
-            self.piece_positions[piece].remove(start)
-            self.piece_positions[piece].append(target)
-
-            # Update half move count
-            self.half_moves += 1
-
-            # Update castling rights
-            if (piece_type(piece) == ROOK):
-                if (piece_color(piece) == WHITE):
-                    if (start == 0):
-                        self.castling_rights &= ~CASTLING_WHITE_QUEEN
-                    elif (start == 7):
-                        self.castling_rights &= ~CASTLING_WHITE_KING
-                else:
-                    if (start == 56):
-                        self.castling_rights &= ~CASTLING_BLACK_QUEEN
-                    elif (start == 63):
-                        self.castling_rights &= ~CASTLING_BLACK_KING
-            elif (piece_type(piece) == KING):
-                if (piece_color(piece) == WHITE):
-                    self.castling_rights &= ~(CASTLING_WHITE_KING & CASTLING_WHITE_QUEEN)
-                else:
-                    self.castling_rights &= ~(CASTLING_BLACK_KING & CASTLING_BLACK_QUEEN)
-            elif (piece_type(piece) == PAWN):
-                self.half_moves = 0 # Pawn moves reset half move count
-
-            # update enpassant file
-            if (move.is_double_push()):
-                self.ep_file = start & 7
-            else:
-                self.ep_file = NO_EP_FILE
-        # TODO:
-        # Move is a capture, castle, or promotion
+        if (move.is_quiet()):
+            self.make_quiet(move)
+        elif (move.is_capture()):
+            self.make_capture(move)
+        elif (move.is_double_push()):
+            self.make_double_push(move)
+        elif (move.is_castle()):
+            self.make_castle(move)
+        elif (move.is_promotion()):
+            self.make_promotion(move)
         else:
-            pass
-
+            self.make_enpassant(move)
 
         # Switch side to move and increment full move count
         if (self.to_move == WHITE):
@@ -143,6 +127,133 @@ class State:
 
         self.full_moves += 1
         pass
+
+    def make_quiet(self, move: Move) -> None:
+        start = move.start
+        target = move.target
+        piece = self.board[start]
+
+        self.move_piece(start, target, piece)
+
+        # Update half move count
+        self.half_moves += 1
+
+        # Update castling rights
+        # TODO: factor out and use lookup table
+        if (piece_type(piece) == ROOK):
+            if (piece_color(piece) == WHITE):
+                if (start == 0):
+                    self.castling_rights &= ~CASTLING_WHITE_QUEEN
+                elif (start == 7):
+                    self.castling_rights &= ~CASTLING_WHITE_KING
+            else:
+                if (start == 56):
+                    self.castling_rights &= ~CASTLING_BLACK_QUEEN
+                elif (start == 63):
+                    self.castling_rights &= ~CASTLING_BLACK_KING
+        elif (piece_type(piece) == KING):
+            if (piece_color(piece) == WHITE):
+                self.castling_rights &= ~(CASTLING_WHITE_KING & CASTLING_WHITE_QUEEN)
+            else:
+                self.castling_rights &= ~(CASTLING_BLACK_KING & CASTLING_BLACK_QUEEN)
+
+        # Pawn moves reset half move count
+        elif (piece_type(piece) == PAWN):
+            self.half_moves = 0 
+
+        return
+
+    def make_capture(self, move: Move) -> None:
+        start = move.start
+        target = move.target
+        piece = self.board[start]
+
+        # Remove captured piece, then move piece
+        self.remove_piece(target)
+        self.move_piece(start, target, piece)
+        
+        # TODO: If captured piece is a rook, castling rights should be altered
+
+        # Captures reset half move count
+        self.half_moves = 0
+
+        pass
+
+    def make_castle(self, move: Move) -> None:
+        start = move.start
+        target = move.target
+        piece = self.board[start]
+       
+        color = self.to_move
+        rook_start_square = 0
+        rook_target_square = 0
+        if (move.is_kingside_castle()):
+            if (color == WHITE):
+                rook_start_square = 7
+                rook_target_square = 5
+            else:
+                rook_start_square = 0
+                rook_target_square = 3
+        elif (move.is_queenside_castle()):
+            if (color == WHITE):
+                rook_start_square = 63
+                rook_target_square = 61
+            else:
+                rook_start_square = 56
+                rook_target_square = 59
+
+        # Move king and rook
+        self.move_piece(start, target, piece)
+        self.move_piece(rook_start_square, rook_target_square, ROOK | color)
+
+        # Update half move count
+        self.half_moves = 0
+        return
+
+    def make_promotion(self, move: Move) -> None:
+        start = move.start
+        target = move.target
+
+        # Get piece pawn is promoting to
+        color = self.to_move;
+        if (move.is_queen_promotion()):
+            piece = QUEEN | color
+        elif (move.is_knight_promotion()):
+            piece = KNIGHT | color
+        elif (move.is_rook_promotion()):
+            piece = ROOK | color
+        else:
+            piece = BISHOP | color
+
+        self.move_piece(start, target, piece);
+        
+        # Promotion resets half move count
+        self.half_moves = 0
+
+        return
+
+    def make_enpassant(self, move: Move) -> None:
+        start = move.start
+        target = move.target
+        piece = self.board[start]
+
+        if (move.is_double_push()):
+            self.ep_file = start & 7
+        else:
+            self.ep_file = NO_EP_FILE
+        return 
+
+    def make_double_push(self, move: Move) -> None:
+        start = move.start
+        target = move.target
+        piece = self.board[start]
+
+
+        if (move.is_double_push()):
+            self.ep_file = start & 7
+        else:
+            self.ep_file = NO_EP_FILE
+        return
 
     def unmake_move(self, move: Move) -> None:
         pass
