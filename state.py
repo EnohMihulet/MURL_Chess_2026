@@ -153,5 +153,8 @@ class State:
     def is_checkmate(self) -> bool:
         return False
 
+    def is_draw(self) -> bool:
+        return False
+
     def is_stalemate(self) -> bool:
         return False

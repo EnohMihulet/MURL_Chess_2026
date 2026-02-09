@@ -3,7 +3,7 @@ from move import Move
 from state import State
 from piece import Piece
 
-class move_generator:
+class Move_Generator:
 
     def __init__(self):
         pass
