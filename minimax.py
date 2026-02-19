@@ -1,93 +1,115 @@
-from constants import *
-from move import *
-from piece import *
-from state import *
-from evaluator import *
-from move_generator import *
+import chess
 import math
+from timer import *
+
+PIECE_VALUES = {
+    chess.PAWN: 1,
+    chess.KNIGHT: 3,
+    chess.BISHOP: 3,
+    chess.ROOK: 5,
+    chess.QUEEN: 9,
+    chess.KING: 0,
+}
 
 class Searcher:
-
     def __init__(self):
-        self.evalutator = Evaluator()
-        self.generator = Move_Generator()
-        self.best_move = Move(0, 0, MOVE_FLAG_QUIET)
-        self.max_depth = 3
+        self.max_depth = 5
 
-    def search(self, state: State) -> Move:
+        self.board = chess.Board()
+        self.best_move = None
+
+    def search(self):
         # How deep we search
         depth = self.max_depth
-        if (state.to_move == WHITE):
-            self.mini(state, depth)
+        if (self.board.turn):
+            self.maxi(depth, -math.inf, math.inf)
         else:
-            self.maxi(state, depth)
+            self.mini(depth, math.inf,- math.inf)
 
         return self.best_move 
 
     # White to move
-    def maxi(self, state: State, depth: int) -> float:
-
-        # Max depth reached
+    def maxi(self, depth: int, alpha: int, beta: int) -> int:
+        #If the game ended
         if (depth == 0):
-            return self.evalutator.evaluate(state, WHITE)
+            return self.evaluate()
 
-        # The game ended
-        if (state.is_checkmate()):
+        if (self.board.is_checkmate()):
             return -math.inf
-        elif (state.is_draw()):
+        elif (self.board.is_stalemate() or self.board.is_insufficient_material() or self.board.is_repetition()):
             return 0
 
         max = -math.inf
-        moves = []
 
-        #Populate move array
-        self.generator.gen_moves(moves, WHITE)
-        
-        # Filter out illegal moves
-        self.generator.filter_moves(moves, WHITE)
+        # Populate move array
+        moves = self.board.generate_legal_moves()
 
         for move in moves:
-            state.make_move(move)
+            self.board.push(move)
 
-            score = self.mini(state, depth - 1)            
+            score = self.mini(depth - 1, alpha, beta)            
             
-            state.unmake_move(move)
+            self.board.pop()
 
             if (score > max):
                 max = score
-                # At the root we set the best move
+                # Update alpha, new best move
+                if (score > alpha):
+                    alpha = score
+
                 if (depth == self.max_depth):
                     self.best_move = move
 
+            # Beta cut-off
+            if (score >= beta):
+                return score
+                
         return max
 
     
     # Black to move
-    def mini(self, state: State, depth: int) -> float:
+    def mini(self, depth: int, alpha: int, beta: int) -> int:
         if (depth == 0):
-            return self.evalutator.evaluate(state, BLACK)
+            return self.evaluate()
 
-        if (state.is_checkmate()):
+        if (self.board.is_checkmate()):
             return math.inf
-        elif (state.is_draw()):
+        elif (self.board.is_stalemate() or self.board.is_insufficient_material() or self.board.is_repetition()):
             return 0
 
-        min = math.inf
+        min = math.inf         
         moves = []
         
-        self.generator.gen_moves(moves, BLACK)
-        self.generator.filter_moves(moves, BLACK)
+        #Populate move array
+        moves = self.board.generate_legal_moves()
 
         for move in moves:
-            state.make_move(move)
+            self.board.push(move)
 
-            score = self.maxi(state, depth - 1)
-
-            state.unmake_move(move)
+            score = self.mini(depth - 1,alpha, beta)            
+            
+            self.board.pop()
 
             if (score < min):
                 min = score
+
+                if (score < alpha):
+                    alpha = score
+
                 if (depth == self.max_depth):
                     self.best_move = move 
-
+            # Beta cut-off
+            if (score <= beta):
+                return score
         return min
+
+
+    def evaluate(self) -> int:
+        score = 0
+
+        for piece_type, value in PIECE_VALUES.items():
+            white_piece_score = len(self.board.pieces(piece_type, chess.WHITE))
+            black_piece_score = len(self.board.pieces(piece_type, chess.BLACK))
+            score += value * (white_piece_score - black_piece_score)
+
+        return score
